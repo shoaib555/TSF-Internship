@@ -1,0 +1,55 @@
+# Task #1,Prediction using supervised ML
+
+
+### Reading the Data and loading required packages
+```{r}
+library(tidyverse)
+library(cowplot)
+library(MLmetrics)
+ll <- read.csv("C:/Users/Shoaib/Videos/TSF/linear.txt")
+str(ll)
+```
+
+### EDA
+```{r}
+c=ll%>%ggplot(aes(Hours,Scores))+geom_point()+geom_smooth(method = lm)+ggtitle("Linear Relationship between Hours & Scores")
+par(mfrow=c(1,3))
+a=ll%>%ggplot(aes(Hours))+geom_boxplot(fill="blue")+ggtitle("Boxplot for Hours")+coord_flip()
+b=ll%>%ggplot(aes(Scores))+geom_boxplot(fill="blue")+ggtitle("Boxplot for Scores")+coord_flip()
+plot_grid(a,b,c, labels = "AUTO")
+```
+
+### Running a simple linear regresion
+```{r}
+l1=lm(Scores~.,data=ll)
+summary(l1)
+```
+
+### checking if the linear model assumptions are met
+```{r}
+
+plot(l1)
+```
+
+### fitting the values on the data and checking for the error
+```{r}
+ll$pred=predict(l1,data=ll,type = "response")
+ll$pred=round(ll$pred,0)
+RMSE(ll$pred,ll$Scores)
+```
+
+### Backtracking the model
+```{r}
+prediction=ll$pred
+actual=ll$Scores
+plot(actual,col="Red",xlab="Hours",ylab = "Scores")+lines(actual,col="Red")+title("Actual")
+plot(prediction,col="Blue",xlab="Hours",ylab="Scores")+lines(prediction,col="Blue")+lines(actual,col="Red")+title("Actual vs Predicted")
+```
+
+### Prediction for 9.25hrs
+```{r}
+predict(l1,data.frame(Hours=9.25),interval = "confidence")
+predict(l1,data.frame(Hours=9.25),interval = "prediction")
+```
+## Conclusion
+### The predicted score for someone investing 9.25 hours is 92.90.
