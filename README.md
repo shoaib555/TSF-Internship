@@ -1,6 +1,6 @@
 # TSF-Internship
 These are the tasks that were assigned during the one month internship.
-The task included
+The tasks included
 1) Preciting score using linear model
 2) EDA of Reatail store
 3) EDA of global terrorism
