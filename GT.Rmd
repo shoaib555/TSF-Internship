@@ -1,0 +1,83 @@
+
+# Task #4 EDA Terrorism 
+
+```{r}
+rm(list=ls())
+gt=read.csv("gt.csv",na.strings =c("",NA))
+
+Miss <- function(x){sum(is.na(x))/length(x)*100}
+apply(gt,2,Miss)
+
+library(dplyr)
+gt%>%select(iyear,imonth,iday,country_txt,region_txt,latitude,longitude,city,multiple,success,suicide,attacktype1_txt,gname,targtype1_txt,natlty1_txt,weaptype1_txt,nkill,nwound,nkillter)->gt1
+
+str(gt1)
+
+sapply(gt1, function(x) sum(is.na(x)))
+
+str(gt1)
+summary(gt1)
+
+gt1$multiple=as.factor(gt1$multiple)
+gt1$success=as.factor(gt1$success)
+gt1$suicide=as.factor(gt1$suicide)
+
+
+gt1%>%mutate(decade = ifelse(iyear<1980, '70s', ifelse(iyear < 1990, '80s', ifelse(iyear < 2000, '90s',ifelse(iyear < 2010, '2000s', '2010s')))))->gt1
+
+gt1$decade=factor(gt1$decade, levels=c("70s", "80s", "90s", "2000s", "2010s"))
+
+
+library(ggplot2)
+gt1%>%ggplot(aes(iyear))+geom_histogram(stat="count")+ggtitle("Terrorism attack over time")+xlab("Year")
+
+gt1%>%ggplot(aes(attacktype1_txt))+geom_histogram(stat="count")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("Terrorism attack type distribution")
+
+gt1%>%ggplot(aes(targtype1_txt,fill=decade))+geom_histogram(stat="count")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("Terrorism over time")+xlab("Target type")
+
+
+gt1%>%group_by(targtype1_txt)%>%dplyr::summarise(nr_of_attacks = n())%>%arrange(desc(nr_of_attacks))%>%top_n(10,nr_of_attacks)%>%ggplot(aes(x=reorder((targtype1_txt),-nr_of_attacks),nr_of_attacks))+theme(axis.text.x = element_text(angle = 45, hjust = 1))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 10 targets types")
+
+gt1%>%filter(weaptype1_txt!='Unknown')%>%group_by(weaptype1_txt)%>%dplyr::summarise(nr_of_attacks = n())%>%arrange(desc(nr_of_attacks))%>%top_n(5,nr_of_attacks)%>%ggplot(aes(x=reorder((weaptype1_txt),-nr_of_attacks),nr_of_attacks))+theme(axis.text.x = element_text(angle = 45, hjust = 1))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 5 weapon types")+xlab("Weapon type")
+
+
+gt1%>%filter(iyear > 2006)->gt2000
+
+
+library(ggmap)
+library(rworldmap)
+library(ggpubr)
+
+world=borders("world", colour="gray50", fill="gray50")
+
+worldmap=ggplot()+world+scale_y_continuous(limits = c(-55,90))
+
+worldmap+geom_point(aes(x=gt2000$longitude[gt1$nkill<51], y=gt2000$latitude[gt1$nkill<51]), col='green', alpha= 0.2) +
+geom_point(aes(x=gt2000$longitude[gt1$nkill>50], y=gt2000$latitude[gt1$nkill>50]), col='red', size=2,position = "jitter")+ggtitle("Location of terrorist attacks by severity")
+
+
+gt1%>%group_by(region_txt)%>%dplyr::summarise(nr_of_attacks =n())%>%arrange(desc(nr_of_attacks))%>%top_n(10,nr_of_attacks)%>%ggplot(aes(x=reorder((region_txt),-nr_of_attacks),nr_of_attacks))+geom_bar(stat = "identity",fill="pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("top 10 regions attacked")+xlab("Region")
+
+gt1%>%group_by(country_txt)%>%dplyr::summarise(nr_of_attacks =n())%>%arrange(desc(nr_of_attacks))%>%top_n(10,nr_of_attacks)%>%ggplot(aes(country_txt,nr_of_attacks))+geom_bar(stat = "identity",fill="pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("top 10 countries attacked")+xlab("Country")
+
+gt1 %>%filter(city!='Unknown')%>%group_by(city)%>%dplyr::summarise(nr_of_attacks = n())%>%arrange(desc(nr_of_attacks))%>%top_n(10,nr_of_attacks)%>%ggplot(aes(x=reorder((city),-nr_of_attacks),nr_of_attacks))+geom_bar(stat = "identity",fill="pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("top 10 cities attacked")+xlab("Cities")
+
+gt1%>%select(decade,latitude,longitude,gname)%>%group_by(decade) %>%slice(1:10000)->gt5
+
+gt5%>% group_by(gname) %>% filter(n() >= 300 & gname != "Unknown")->gt5
+
+worldmap+geom_point(aes(x=gt5$longitude,y=gt5$latitude,col=gt5$gname),size=2,position = 'jitter')+ggtitle('Location of terrorist attacks by group')+labs(col="Group")
+
+
+gt1 %>%filter(gname!='Unknown')%>%group_by(gname)%>%dplyr::summarise(nr_of_attacks = n())%>%arrange(desc(nr_of_attacks))%>%top_n(10,nr_of_attacks)%>%ggplot(aes(x=reorder((gname),-nr_of_attacks),nr_of_attacks))+geom_bar(stat = "identity",fill="pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("top 10 terrorist groups")+xlab("Groups")
+
+gt1%>%group_by(decade)%>%dplyr::summarise(nr_of_attacks = n())%>%arrange(desc(nr_of_attacks))%>%ggplot(aes(decade,nr_of_attacks))+geom_bar(stat = "identity",fill="pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("Attacks growth in decade")+xlab("Decade")
+
+
+gt1%>%group_by(region_txt,country_txt)%>%dplyr::summarize(nr_of_attacks=n())%>%mutate(per=nr_of_attacks/sum(nr_of_attacks))%>%arrange(desc(nr_of_attacks))%>%head(20)%>%ggplot(aes(country_txt,nr_of_attacks,fill=region_txt))+geom_bar(stat = "identity")+xlab("country")+ggtitle("Terrorist attack per country and region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+labs(fill="Region")
+
+gt1%>%filter(nkill !="Unknown")%>%select(region_txt,nkill,nwound,iyear,gname,decade)%>%group_by(region_txt,iyear)%>%dplyr::summarize(Total_death=sum(nkill))%>%ggplot(aes(region_txt,Total_death))+geom_bar(stat="identity",fill="Pink")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+scale_y_continuous(breaks = c(0,50000,120000))+xlab("Region")+ggtitle("Total deaths by Region")
+
+
+```
+
