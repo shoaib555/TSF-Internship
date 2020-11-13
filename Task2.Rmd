@@ -1,0 +1,70 @@
+
+# Task #2, Unsupervised ML
+
+### Loading the data and the required packages
+```{r}
+library(DataExplorer)
+library(RColorBrewer)
+library(corrplot)
+library(factoextra)
+library(NbClust)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+rm(list=ls())
+ir=iris
+summary(ir)
+```
+
+### EDA
+```{r}
+
+plot_histogram(ir[,1:4])
+
+boxplot(ir[,1:4],
+        las=1,
+        horizontal = TRUE,
+        cex= 0.6,
+        par(cex.axis = 0.7),
+        col=brewer.pal(8,"Set1"),
+        main = "Boxplots of DV")
+
+
+corrplot(cor(ir[,1:4]),type="upper",method="number")
+
+
+ir%>%ggplot(aes(Species,Sepal.Length,fill=Species))+geom_boxplot()+guides(fill=F)+ggtitle("Species vs sepal length")->a
+ir%>%ggplot(aes(Species,Sepal.Width,fill=Species))+geom_boxplot()+guides(fill=F)+ggtitle("Species vs sepal width")->b
+ir%>%ggplot(aes(Species,Petal.Length,fill=Species))+geom_boxplot()+guides(fill=F)+ggtitle("Species vs petal length")->c
+ir%>%ggplot(aes(Species,Petal.Width,fill=Species))+geom_boxplot()+guides(fill=F)+ggtitle("Species vs petal width")->d
+plot_grid(a,b,c,d,labels = "AUTO")
+```
+
+### Performing Cluster analysis using k-means
+```{r}
+normalize <- function(x){
+  return ((x-min(x))/(max(x)-min(x)))}
+ir1=ir[,-5]
+ir1=sapply(ir1, normalize)
+
+
+nc=NbClust(ir1,min.nc=2,max.nc=5,method = "kmeans")
+```
+
+
+```{r}
+table(nc$Best.nc[1,])
+#The idea of kmeans is to reduce WSS
+fviz_nbclust(ir1,kmeans,method="wss")+labs(subtitle = "Elbow method")
+#call kmeans funct with 4 cluster
+kme.cl=kmeans(ir1,3)
+kme.cl
+#visulaize the cluster
+fviz_cluster(kme.cl,data=ir1,geom = "point",labelsize = 0)
+#add another col to the dataframe with clsuter number
+ir$cluster=kme.cl$cluster
+#perform aggregation
+ag=aggregate(ir[,-5],list(ir$cluster),FUN=mean)
+ag
+```
+
