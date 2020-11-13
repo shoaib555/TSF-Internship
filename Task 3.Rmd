@@ -1,0 +1,69 @@
+
+# Task #3 EDA Retail
+
+### Read data and load packages
+```{r}
+library(dplyr)
+library(ggplot2)
+ss=read.csv("SS.csv")
+str(ss)
+summary(ss)
+ss=ss[,c(-3,-6)]
+
+
+ss%>%ggplot(aes(x=Ship.Mode,y=Discount,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Ship.Mode vs Discounts split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Ship.Mode,y=Sales,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Ship.Mode vs sales split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Ship.Mode,y=Profit,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Ship.Mode vs Profit split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Ship.Mode,y=Quantity,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Ship.Mode vs quantity split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Segment,y=Quantity,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Segments vs quantity split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Segment,y=Sales,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Segment vs sales split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Segment,y=Discount,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Segments vs Discount split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%ggplot(aes(x=Segment,y=Profit,fill=Category))+geom_bar(position=position_dodge(),stat="identity")+scale_fill_brewer(palette = "Pastel1")+facet_wrap(.~Region)+ggtitle("Segment vs Profit split across category and Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+summary(ss)
+ss1=ss[,8:11]
+library(corrplot)
+corrplot(cor(ss1),type="upper",method="number")
+```
+
+
+```{r}
+ss%>%group_by(State)%>%summarize(Total=sum(Sales))%>%arrange(desc(Total))%>%top_n(10,Total)%>%ggplot(aes(x=reorder((State),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 10 states based on Total sales")+xlab("States")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(City)%>%summarize(Total=sum(Sales))%>%arrange(desc(Total))%>%top_n(10,Total)%>%ggplot(aes(x=reorder((City),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 10 City based on Total sales")+xlab("City")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(Region)%>%summarize(Total=sum(Sales))%>%arrange(desc(Total))%>%ggplot(aes(x=reorder((Region),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Region based on Total sales")+xlab("Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(Sub.Category)%>%summarize(Total=sum(Sales))%>%arrange(desc(Total))%>%top_n(10,Total)%>%ggplot(aes(x=reorder((Sub.Category),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 10 Subcategory based on Total sales")+xlab("SubCategory")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(Sub.Category)%>%summarize(Total=sum(Profit))%>%arrange(desc(Total))%>%top_n(10,Total)%>%ggplot(aes(x=reorder((Sub.Category),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 10 Subcategory based on Total sales")+xlab("SubCategory")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(Region)%>%summarize(Total=sum(Profit))%>%arrange(desc(Total))%>%ggplot(aes(x=reorder((Region),-Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Region based on Total Profit")+xlab("Region")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+ss%>%group_by(Sub.Category)%>%summarize(Total=sum(Profit))%>%arrange(Total)%>%top_n(-4,Total)%>%ggplot(aes(x=reorder((Sub.Category),Total),y=Total))+geom_bar(stat="identity",fill="pink")+ggtitle("Top 4 loss making sub category")+xlab("SubCategory")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+ss%>%group_by(State)%>%summarize(Total=sum(Profit))%>%arrange(Total)%>%top_n(-10,Total)%>%ggplot(aes(x=reorder((State),Total),y=Total))+geom_bar(stat = "identity",fill="pink")+ggtitle("Top 10 States making loss")+xlab("State")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ss%>%group_by(City)%>%summarize(Total=sum(Profit))%>%arrange(Total)%>%top_n(-10,Total)%>%ggplot(aes(x=reorder((City),Total),y=Total))+geom_bar(stat = "identity",fill="pink")+ggtitle("Top 10 City making loss")+xlab("City")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+```{r}
+ss%>%ggplot(aes(Sales,Profit,color=Region))+geom_point(aes(size=Sales))+guides(size=F)+facet_wrap(.~Sub.Category)+scale_x_continuous(breaks = c(0,10000,20000))+ggtitle("Sales vs Profit split across Region and SubCategory")
+ss%>%ggplot(aes(Sales,Profit,color=Segment))+geom_point(aes(size=Sales))+guides(size=F)+facet_wrap(.~State)+scale_x_continuous(breaks = c(0,10000,20000))+ggtitle("Sales vs Profit split across segments and States ")
+
+```
+
