@@ -1,0 +1,381 @@
+# Task #7 Stock Market Prediction
+
+### Reading and preparing the data
+```{r}
+rm(list=ls())
+i=read.csv("India.csv")
+str(i)
+news=i[i$publish_date %in% c('20190604':'20200603'),]
+str(news)
+library(dplyr)
+news%>%group_by(publish_date)%>%dplyr::summarise(headline=paste(headline_text,collapse = ' '))->news
+st=read.csv("bse.csv")
+str(st)
+news$publish_date=format(as.Date(as.character(news$publish_date), format="%Y%m%d"),"%Y-%m-%d")
+st$Date=as.Date(st$Date)
+colnames(news)[1]="Date"
+news$Date=as.Date(news$Date)
+final=left_join(st,news,by="Date")
+
+final=final[-c(97,142),]
+bs=final[,1:7]
+summary(bs)
+sapply(bs, function(x) sum(is.na(x)))
+```
+
+### Loading the packages and creating variable for further analysis
+```{r}
+library(ggplot2)
+library(tseries)
+library(tidyquant)
+library(gbm)
+library(TTR)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(caret)
+library(randomForest)
+
+bs$Open=as.numeric(bs$Open)
+bs$High=as.numeric(bs$High)
+bs$Low=as.numeric(bs$Low)
+bs$Close=as.numeric(bs$Close)
+bs$Adj.Close=as.numeric(bs$Adj.Close)
+bs$Volume=as.numeric(bs$Volume)
+str(bs)
+
+ggplot(bs,aes(Adj.Close))+geom_histogram(fill="Darkgreen",col="green",bins=10)+ggtitle("Distribtion of daily stock price")
+bss=ts(bs[,6],start = c(2019),frequency = 365)
+par(bg="grey")
+plot(bss,col="blue",lwd=4)+title("Time series")
+
+#Generating technical indicators of stock
+return=Delt(bs$Adj.Close)
+
+#Implementing moving average
+average10=rollapply(bs$Adj.Close,10,mean)
+average20=rollapply(bs$Adj.Close,20,mean)
+
+#implementing standard deviation
+sd10=rollapply(bs$Adj.Close,10,sd)
+sd20=rollapply(bs$Adj.Close,20,sd)
+
+#Implemnting RSI
+rsi5=RSI(bs$Adj.Close,5,"SMA")
+rsi14=RSI(bs$Adj.Close,14,"SMA")
+
+#Implementing MACD
+macd=MACD(bs$Adj.Close,12,26,9,"EMA")
+
+#Implementing bollinger band
+bo_ban=BBands(bs$Adj.Close,20,"SMA",2)
+
+#Binding Date price with technical indicators
+bsfinal=cbind(Price=bs$Adj.Close,average10,average20,sd10,sd20,rsi5,rsi14,macd,bo_ban)
+write.csv(bsfinal,"BBF.csv",row.names = F)
+
+##Clean the data
+#If Price > upper bollinger band, and macd value > macd signal ->Buy Signal(1)
+#If Price < lower bollinger band and macd value < macd signal -> sell signal(-1)
+#Else ,out of market ->signal 00M(0)
+
+f1=read.csv("BBF.csv")
+f1$Direction=ifelse(f1$Price > f1$up & f1$macd > f1$signal, "Buy",ifelse(f1$Price < f1$dn & f1$macd < f1$signal,"sell","00M"))
+
+f2=cbind(f1,final$headline)
+f2=na.omit(f2)
+
+f1=na.omit(f1)
+table(f1$Direction)
+f1$Direction=as.factor(f1$Direction)
+str(f1)
+```
+
+### Running predictive models
+```{r}
+#Split data in to train and test
+train=f1[c(1:150),]
+test=f1[c(151:209),]
+prop.table(table(train$Direction))
+###Balcing the class using smote
+library(DMwR)
+tr.sm=SMOTE(Direction~.,train,perc.over = 400,k=5,perc.under = 200)
+prop.table(table(tr.sm$Direction))
+
+#CART
+set.seed(123)
+r.ctrl=rpart.control(minsplit = 1,minbucket = 1,cp=0,xval=10)
+cart=rpart(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14,data=tr.sm,method = "class",control = r.ctrl)
+fancyRpartPlot(cart)
+summary(cart)
+
+cart$cptable
+
+ptree=prune(cart,0.030,"CP")
+fancyRpartPlot(ptree)
+
+##Making prediction
+tr.sm$pred=predict(ptree,data = tr.sm, type= "class")
+confusionMatrix(tr.sm$pred,tr.sm$Direction)
+
+test$pred=predict(ptree,newdata=test,type="class")
+confusionMatrix(test$pred,test$Direction)
+
+str(tr.sm)
+
+#Random forest
+rf=randomForest(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14,data =tr.sm)
+rf
+tr.sm$predrf=predict(rf,newdata = tr.sm,type = "class")
+confusionMatrix(tr.sm$predrf,tr.sm$Direction)
+
+test$predrf=predict(rf,newdata = test,type="class")
+confusionMatrix(test$predrf,test$Direction)
+
+##ANN
+ann=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14,data=tr.sm,method="nnet",trControl=trainControl(method="cv",number=10))
+tr.sm$predn=predict(ann,newdata = tr.sm,type="raw")
+confusionMatrix(tr.sm$predn,tr.sm$Direction)
+
+test$predn=predict(ann,newdata = test,type="raw")
+confusionMatrix(test$predn,test$Direction)
+
+##Xgboost
+xg=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14,data=tr.sm,method="xgbTree",trControl=trainControl(method="cv",number=10))
+tr.sm$predx=predict(xg,newdata = tr.sm,type="raw")
+confusionMatrix(tr.sm$predx,tr.sm$Direction)
+
+test$predx=predict(xg,newdata = test,type="raw")
+confusionMatrix(test$predx,test$Direction)
+
+# LDA
+ld=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14,data=tr.sm,method="lda",trControl=trainControl(method="cv",number=10))
+tr.sm$predl=predict(ld,newdata = tr.sm,type="raw")
+confusionMatrix(tr.sm$predl,tr.sm$Direction)
+
+test$predl=predict(ld,newdata = test,type="raw")
+confusionMatrix(test$predl,test$Direction)
+
+```
+
+### Using NLP to predict Price
+```{r}
+str(final)
+str(st)
+str(bs)
+str(f2)
+nlp=left_join(bs,final,by="Date")
+nlp=nlp[,c(6,14)]
+colnames(nlp)[1]="Price"
+
+#Creating a corpus with the varibale headline for 
+#cleaning the data and then creating Document term matrix with the varible Price as DV.
+library(tm)
+library(SnowballC)
+library(ggplot2)
+library(RColorBrewer)
+library(wordcloud)
+library(topicmodels)
+library(data.table)
+library(stringi)
+library(syuzhet)
+library(dplyr)
+library(plyr)
+library(grid)
+library(gridExtra)
+
+ti=Corpus(VectorSource(nlp$headline))
+ti = tm_map(ti, content_transformer(tolower))
+as.character(ti[[60]])
+ti= tm_map(ti, removePunctuation)
+as.character(ti[[60]])
+ti= tm_map(ti, removeWords, stopwords("english"))
+as.character(ti[[60]])
+ti = tm_map(ti, stemDocument)
+as.character(ti[[60]])
+ti = tm_map(ti, stripWhitespace)
+as.character(ti[[60]])
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+ti=tm_map(ti, content_transformer(removeURL))
+as.character(ti[[60]])
+removeUsername <- function(x) gsub("@[^[:space:]]*", "", x)  
+ti= tm_map(ti, content_transformer(removeUsername))
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)   
+ti<- tm_map(ti, content_transformer(removeNumPunct))
+removeURL <- function(x) gsub("www[^[:space:]]*", "", x)
+ti=tm_map(ti, content_transformer(removeURL))
+removeSingle <- function(x) gsub(" . ", " ", x)   
+ti=tm_map(ti, content_transformer(removeSingle))
+as.character(ti[[60]])
+
+tdm<- TermDocumentMatrix(ti, control= list(wordLengths= c(1, Inf)))
+tdm
+
+#####Find the terms used most frequently
+(freq.terms <- findFreqTerms(tdm, lowfreq = 1000))
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq > 1000)
+df <- data.frame(term = names(term.freq), freq= term.freq)
+
+#####Frequency analysis
+
+(freq.terms <- findFreqTerms(tdm, lowfreq = 2500))
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq > 2500 & term.freq < 5000)
+df1 <- data.frame(term = names(term.freq), freq= term.freq)
+
+(freq.terms <- findFreqTerms(tdm, lowfreq = 4000))
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq > 4000 & term.freq < 8000)
+df2 <- data.frame(term = names(term.freq), freq= term.freq)
+
+
+
+#####plotting the graph of frequent terms
+p1=ggplot(df1, aes(reorder(term, freq),freq)) + theme_bw() + geom_bar(stat = "identity")  + coord_flip() +labs(list(title="@10", x="Terms", y="Term Counts")) + theme(axis.text.y = element_text(size=10))
+
+
+p2=ggplot(df, aes(reorder(term, freq),freq)) + theme_bw() + geom_bar(stat = "identity")  + coord_flip() +labs(list(title="@25", x="Terms", y="Term Counts"))+
+  theme(axis.text.y = element_text(size=9))
+
+#####plotting the graph of frequent terms
+p1
+p2
+#####calculate the frequency of words and sort it by frequency and setting up the Wordcloud
+# Creating the wordcloud
+png("wordcloud_packages.png", width=1280,height=800,res=300)
+word.freq <-sort(rowSums(as.matrix(tdm)), decreasing= F)
+pal<- brewer.pal(8, "Dark2")
+wordcloud(words = names(word.freq), freq = word.freq,min.freq=1,scale=c(4,.5),rot.per=0.15,random.order = F, colors = pal, max.words = 200)
+
+
+#Sentiment analysis for the year based on headline.
+mysentiment<-get_nrc_sentiment((nlp$headline))
+
+# Get the sentiment score for each emotion
+mysentiment.positive =sum(mysentiment$positive)
+mysentiment.anger =sum(mysentiment$anger)
+mysentiment.anticipation =sum(mysentiment$anticipation)
+mysentiment.disgust =sum(mysentiment$disgust)
+mysentiment.fear =sum(mysentiment$fear)
+mysentiment.joy =sum(mysentiment$joy)
+mysentiment.sadness =sum(mysentiment$sadness)
+mysentiment.surprise =sum(mysentiment$surprise)
+mysentiment.trust =sum(mysentiment$trust)
+mysentiment.negative =sum(mysentiment$negative)
+
+# Create the bar chart
+yAxis <- c(mysentiment.positive,
+           + mysentiment.anger,
+           + mysentiment.anticipation,
+           + mysentiment.disgust,
+           + mysentiment.fear,
+           + mysentiment.joy,
+           + mysentiment.sadness,
+           + mysentiment.surprise,
+           + mysentiment.trust,
+           + mysentiment.negative)
+
+xAxis <- c("Positive","Anger","Anticipation","Disgust","Fear","Joy","Sadness",
+           "Surprise","Trust","Negative")
+colors <- c("green","red","blue","orange","red","green","orange","blue","green","red")
+yRange <- range(0,yAxis)
+barplot(yAxis, names.arg = xAxis, 
+        xlab = "Emotional valence", ylab = "Score", main = "Head lines", 
+        sub = "	Headline", col = colors, border = "black", xpd = F, ylim = yRange,
+        axisnames = T, cex.axis = 0.8, cex.sub = 0.8, col.sub = "blue")
+
+
+#Extracting sentiment score for each headline
+sn=get_sentiment(nlp$headline,method="syuzhet")
+sn=as.data.frame(sn)
+ff=cbind(nlp,sn)
+ff=ff[,-2]
+colnames(ff)[2]="Score"
+
+ff%>%ggplot(aes(Price,Score))+geom_point()+geom_smooth(method = "lm")
+
+```
+
+```{r}
+# Creating a model with the extracted scores
+colnames(f2)[15]="headline"
+f2$headline=as.character(f2$headline)
+f3=left_join(f2,final,by="headline")
+f4=f3[,c(1:15)]
+str(f4)
+
+sn1=get_sentiment(f4$headline,method="syuzhet")
+sn1=as.data.frame(sn1)
+ff1=cbind(f4,sn1)
+ff1=ff1[,-15]
+colnames(ff1)[15]="Score"
+
+train1=ff1[c(1:150),]
+test1=ff1[c(151:209),]
+prop.table(table(train1$Direction))
+summary(train1)
+train1$Direction=as.factor(train1$Direction)
+test1$Direction=as.factor(test1$Direction)
+
+
+#CART
+set.seed(2230)
+r.ctrl=rpart.control(minsplit = 1,minbucket = 1,cp=0,xval=10)
+cart1=rpart(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14+Score,data=train1,method = "class",control = r.ctrl)
+fancyRpartPlot(cart)
+summary(cart)
+
+cart1$cptable
+
+ptree1=prune(cart1,0.06,"CP")
+fancyRpartPlot(ptree1)
+varImp(ptree1)
+##Making prediction
+train1$pred=predict(ptree1,data = train1, type= "class")
+confusionMatrix(train1$pred,train1$Direction)
+str(test)
+test1$pred=predict(ptree1,newdata=test1,type="class")
+confusionMatrix(test1$pred,test1$Direction)
+
+#Random forest
+rf1=randomForest(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14+Score,data =train1)
+rf1
+varImpPlot(rf1,main="Vaiable Imp")
+train1$predrf=predict(rf1,newdata = train1,type = "class")
+confusionMatrix(train1$predrf,train1$Direction)
+
+test1$predrf=predict(rf1,newdata = test1,type="class")
+confusionMatrix(test1$predrf,test1$Direction)
+
+##ANN
+ann1=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14+Score,data=train1,method="nnet",trControl=trainControl(method="cv",number=10))
+train1$predn=predict(ann1,newdata = train1,type="raw")
+confusionMatrix(train1$predn,train1$Direction)
+varImp(ann1)
+
+test1$predn=predict(ann1,newdata = test1,type="raw")
+confusionMatrix(test1$predn,test1$Direction)
+
+##Xgboost
+xg1=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14+Score,data=train1,method="xgbTree",trControl=trainControl(method="cv",number=10))
+train1$predx=predict(xg1,newdata = train1,type="raw")
+confusionMatrix(train1$predx,train1$Direction)
+varImp(xg1)
+
+test1$predx=predict(xg1,newdata = test1,type="raw")
+confusionMatrix(test1$predx,test1$Direction)
+
+# LDA
+ld1=train(Direction~Price+average10+average20+sd10+sd20+rsi5+rsi14+Score,data=train1,method="lda",trControl=trainControl(method="cv",number=10))
+train1$predl=predict(ld1,newdata = train1,type="raw")
+confusionMatrix(train1$predl,train1$Direction)
+
+varImp(ld1)
+
+test1$predl=predict(ld1,newdata = test1,type="raw")
+confusionMatrix(test1$predl,test1$Direction)
+
+
+```
+
